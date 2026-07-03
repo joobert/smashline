@@ -426,6 +426,12 @@ decl_imports! {
         new_count: i32
     );
 
+    fn smashline_update_weapon_count_costume(
+        article_id: i32,
+        costume: Costume,
+        new_count: i32
+    );
+
     fn smashline_add_param_object(
         fighter_name: StringFFI,
         object: StringFFI
@@ -478,6 +484,18 @@ pub fn update_weapon_count(
 ) {
     smashline_update_weapon_count(
         article_id,
+        new_count
+    );
+}
+
+pub fn update_weapon_count_costume(
+    article_id: i32,
+    costume: Costume,
+    new_count: i32
+) {
+    smashline_update_weapon_count_costume(
+        article_id,
+        costume,
         new_count
     );
 }

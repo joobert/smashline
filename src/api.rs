@@ -379,14 +379,33 @@ pub extern "C" fn smashline_clone_weapon(
 }
 
 #[no_mangle]
+pub extern "C" fn smashline_update_weapon_count_costume(
+    article_id: i32,
+    costume: Costume,
+    new_count: i32
+) {
+    let mut counts = crate::cloning::weapons::WEAPON_COUNT_UPDATE.write();
+    let entries = counts.entry(article_id).or_default();
+
+    if let Some(entry) = entries
+        .iter_mut()
+        .find(|e| e.costume.as_slice() == costume.as_slice())
+    {
+        entry.count = new_count;
+    } else {
+        entries.push(crate::cloning::weapons::WeaponCountEntry {
+            costume,
+            count: new_count,
+        });
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn smashline_update_weapon_count(
     article_id: i32,
     new_count: i32
 ) {
-    *crate::cloning::weapons::WEAPON_COUNT_UPDATE
-        .write()
-        .entry(article_id)
-        .or_default() = new_count;
+    smashline_update_weapon_count_costume(article_id, Costume::default(), new_count);
 }
 
 #[no_mangle]

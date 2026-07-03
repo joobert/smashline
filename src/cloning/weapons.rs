@@ -5,7 +5,7 @@ use std::{
 
 use locks::RwLock;
 use skyline::hooks::InlineCtx;
-use smashline::{skyline_smash::app::BattleObjectModuleAccessor, Hash40};
+use smashline::{skyline_smash::app::BattleObjectModuleAccessor, Costume, Hash40};
 
 pub struct NewAgent {
     pub old_owner_id: i32,
@@ -27,7 +27,44 @@ pub static NEW_ARTICLES: RwLock<BTreeMap<i32, Vec<NewArticle>>> = RwLock::new(BT
 pub static NEW_AGENTS: RwLock<BTreeMap<i32, Vec<NewAgent>>> = RwLock::new(BTreeMap::new());
 pub static IGNORE_NEW_AGENTS: AtomicBool = AtomicBool::new(false);
 
-pub static WEAPON_COUNT_UPDATE: RwLock<BTreeMap<i32, i32>> = RwLock::new(BTreeMap::new());
+pub struct WeaponCountEntry {
+    pub costume: Costume,
+    pub count: i32,
+}
+
+pub static WEAPON_COUNT_UPDATE: RwLock<BTreeMap<i32, Vec<WeaponCountEntry>>> =
+    RwLock::new(BTreeMap::new());
+
+/// Costume slot of the fighter currently being initialized, if one is known.
+fn current_costume() -> Option<i32> {
+    let entry_id = crate::cloning::fighters::CURRENT_PLAYER_ID.load(Ordering::Relaxed);
+    if entry_id > 7 {
+        return None;
+    }
+
+    crate::utils::get_costume_from_entry_id(entry_id as i32)
+}
+
+/// Resolves the weapon count override for an article, preferring an entry slotted
+/// to `costume` and falling back to the unslotted (global) entry if one exists.
+pub fn get_updated_weapon_count(article_id: i32, costume: Option<i32>) -> Option<i32> {
+    let counts = WEAPON_COUNT_UPDATE.read();
+    let entries = counts.get(&article_id)?;
+
+    if let Some(costume) = costume {
+        if let Some(entry) = entries
+            .iter()
+            .find(|e| e.costume.as_slice().contains(&(costume as usize)))
+        {
+            return Some(entry.count);
+        }
+    }
+
+    entries
+        .iter()
+        .find(|e| e.costume.as_slice().is_empty())
+        .map(|e| e.count)
+}
 
 pub fn try_get_new_agent(
     map: &BTreeMap<i32, Vec<NewAgent>>,
@@ -141,10 +178,10 @@ fn get_static_fighter_data(kind: i32) -> *const StaticFighterData {
 
     new_descriptors.extend_from_slice(unsafe { (*original_data).articles_as_slice() });
 
+    let costume = current_costume();
     for article in new_descriptors.iter_mut() {
-        let weapon_count = WEAPON_COUNT_UPDATE.read();
-        if let Some(new_count) = weapon_count.get(&article.weapon_id) {
-            article.max_count = *new_count;
+        if let Some(new_count) = get_updated_weapon_count(article.weapon_id, costume) {
+            article.max_count = new_count;
         }
     }
 
@@ -375,11 +412,11 @@ unsafe fn kirby_get_copy_articles(ctx: &mut InlineCtx, store_reg: usize) {
         }
     }
 
+    let costume = current_costume();
     for article in new_descriptors.iter_mut() {
         // println!("checking count for article id {:#x}", article.weapon_id);
-        let weapon_count = WEAPON_COUNT_UPDATE.read();
-        if let Some(new_count) = weapon_count.get(&article.weapon_id) {
-            article.max_count = *new_count;
+        if let Some(new_count) = get_updated_weapon_count(article.weapon_id, costume) {
+            article.max_count = new_count;
         }
     }
 

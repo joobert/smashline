@@ -90,6 +90,11 @@ struct StatusScript {
     function: *const (),
 }
 
+struct WeaponCount {
+    article_id: i32,
+    count: i32,
+}
+
 pub struct Agent {
     kind_hash: crate::Hash40,
     costume: Costume,
@@ -97,6 +102,7 @@ pub struct Agent {
     lines: Vec<LineCallback>,
     status: Vec<StatusScript>,
     events: Vec<StateCallback>,
+    weapon_counts: Vec<WeaponCount>,
 }
 
 impl Agent {
@@ -108,6 +114,7 @@ impl Agent {
             lines: vec![],
             status: vec![],
             events: vec![],
+            weapon_counts: vec![],
         }
     }
 
@@ -243,6 +250,14 @@ impl Agent {
         self
     }
 
+    /// Overrides the max spawn count of an article. If a costume was set with
+    /// `set_costume`, the override only applies to fighters on those costume slots.
+    pub fn update_weapon_count(&mut self, article_id: i32, count: i32) -> &mut Self {
+        self.weapon_counts.push(WeaponCount { article_id, count });
+
+        self
+    }
+
     pub fn on_end<T>(&mut self, func: StateFunction<T>) -> &mut Self {
         self.events.push(StateCallback {
             event: ObjectEvent::End,
@@ -289,6 +304,14 @@ impl Agent {
                 self.costume,
                 event.event,
                 event.function as *const (),
+            );
+        }
+
+        for weapon_count in self.weapon_counts.iter() {
+            crate::update_weapon_count_costume(
+                weapon_count.article_id,
+                self.costume,
+                weapon_count.count,
             );
         }
     }
