@@ -19,6 +19,11 @@ fn fighter_initialize_object_data(
     // so the costume is only published for its duration.
     let costume = crate::utils::get_costume_from_entry_id(entry_id).unwrap_or(fighters::NO_COSTUME);
     let previous = fighters::CURRENT_INIT_COSTUME.swap(costume, Ordering::Relaxed);
+
+    // Patch LVD files owned by this fighter before its data is parsed, so
+    // slotted LVD edits only take effect on marked costumes.
+    crate::lvd::apply_lvd_edits_for_fighter(kind, costume.max(0));
+
     call_original!(fighter, id, kind, entry_id, hash);
     fighters::CURRENT_INIT_COSTUME.store(previous, Ordering::Relaxed);
 }

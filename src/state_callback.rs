@@ -24,6 +24,22 @@ fn call_state_callback(agent: &mut L2CFighterBase, event: ObjectEvent) {
     let costume = crate::utils::get_agent_costume(agent.battle_object as *const BattleObject).unwrap_or(0);
     let has_costume = crate::utils::has_costume(hash, costume);
 
+    // Re-apply LVD edits per instance. Initialize covers objects created at
+    // fighter load, but articles are pre-built with their fighter and only
+    // activated later (e.g. pacman's hydrant on down-B), so Start — which
+    // fires on every activation — is the write that lands right before the
+    // instance parses its LVD. This is what keeps a shared LVD file correct
+    // when marked and unmarked slots are in the same match: the last write
+    // before each parse belongs to the instance about to parse it.
+    if matches!(event, ObjectEvent::Initialize | ObjectEvent::Start) {
+        crate::lvd::apply_lvd_edits_for_spawn(
+            hash,
+            object.kind,
+            matches!(category, Some(BattleObjectCategory::Weapon)),
+            costume,
+        );
+    }
+
     for callback in callbacks.iter().filter(|cb| cb.event == event) {
         if let Some(required) = callback.agent {
             if hash != required {

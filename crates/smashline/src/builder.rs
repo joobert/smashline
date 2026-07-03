@@ -90,6 +90,11 @@ struct StatusScript {
     function: *const (),
 }
 
+struct LvdEdit {
+    path: String,
+    callback: crate::LvdEditCallback,
+}
+
 pub struct Agent {
     kind_hash: crate::Hash40,
     costume: Costume,
@@ -97,6 +102,7 @@ pub struct Agent {
     lines: Vec<LineCallback>,
     status: Vec<StatusScript>,
     events: Vec<StateCallback>,
+    lvd_edits: Vec<LvdEdit>,
 }
 
 impl Agent {
@@ -108,6 +114,7 @@ impl Agent {
             lines: vec![],
             status: vec![],
             events: vec![],
+            lvd_edits: vec![],
         }
     }
 
@@ -243,6 +250,27 @@ impl Agent {
         self
     }
 
+    /// Registers an edit to an LVD file belonging to this agent (e.g. article
+    /// collision data such as pacman's firehydrant). The callback receives the
+    /// file's data whenever the agent spawns and may edit parameter values in
+    /// place, but must not change the file's length.
+    ///
+    /// If a costume was set with `set_costume`, the edit only applies to
+    /// instances spawned on those costume slots — other slots keep the
+    /// unmodified file.
+    pub fn lvd_edit(
+        &mut self,
+        lvd_path: impl Into<String>,
+        callback: crate::LvdEditCallback,
+    ) -> &mut Self {
+        self.lvd_edits.push(LvdEdit {
+            path: lvd_path.into(),
+            callback,
+        });
+
+        self
+    }
+
     pub fn on_end<T>(&mut self, func: StateFunction<T>) -> &mut Self {
         self.events.push(StateCallback {
             event: ObjectEvent::End,
@@ -289,6 +317,23 @@ impl Agent {
                 self.costume,
                 event.event,
                 event.function as *const (),
+            );
+        }
+
+        for weapon_count in self.weapon_counts.iter() {
+            crate::update_weapon_count_costume(
+                weapon_count.article_id,
+                self.costume,
+                weapon_count.count,
+            );
+        }
+
+        for lvd_edit in self.lvd_edits.iter() {
+            crate::api::install_lvd_edit_costume(
+                Some(self.kind_hash),
+                self.costume,
+                lvd_edit.path.clone(),
+                lvd_edit.callback,
             );
         }
     }

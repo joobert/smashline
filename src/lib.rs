@@ -111,6 +111,7 @@ mod callbacks;
 mod create_agent;
 mod effects;
 mod interpreter;
+mod lvd;
 mod nro_hook;
 mod params;
 mod runtime_reload;
