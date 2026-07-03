@@ -95,6 +95,11 @@ struct WeaponCount {
     count: i32,
 }
 
+struct LvdEdit {
+    path: String,
+    callback: crate::LvdEditCallback,
+}
+
 pub struct Agent {
     kind_hash: crate::Hash40,
     costume: Costume,
@@ -103,6 +108,7 @@ pub struct Agent {
     status: Vec<StatusScript>,
     events: Vec<StateCallback>,
     weapon_counts: Vec<WeaponCount>,
+    lvd_edits: Vec<LvdEdit>,
 }
 
 impl Agent {
@@ -115,6 +121,7 @@ impl Agent {
             status: vec![],
             events: vec![],
             weapon_counts: vec![],
+            lvd_edits: vec![],
         }
     }
 
@@ -250,6 +257,27 @@ impl Agent {
         self
     }
 
+    /// Registers an edit to an LVD file belonging to this agent (e.g. article
+    /// collision data such as pacman's firehydrant). The callback receives the
+    /// file's data whenever the agent spawns and may edit parameter values in
+    /// place, but must not change the file's length.
+    ///
+    /// If a costume was set with `set_costume`, the edit only applies to
+    /// instances spawned on those costume slots — other slots keep the
+    /// unmodified file.
+    pub fn lvd_edit(
+        &mut self,
+        lvd_path: impl Into<String>,
+        callback: crate::LvdEditCallback,
+    ) -> &mut Self {
+        self.lvd_edits.push(LvdEdit {
+            path: lvd_path.into(),
+            callback,
+        });
+
+        self
+    }
+
     /// Overrides the max spawn count of an article. If a costume was set with
     /// `set_costume`, the override only applies to fighters on those costume slots.
     pub fn update_weapon_count(&mut self, article_id: i32, count: i32) -> &mut Self {
@@ -312,6 +340,15 @@ impl Agent {
                 weapon_count.article_id,
                 self.costume,
                 weapon_count.count,
+            );
+        }
+
+        for lvd_edit in self.lvd_edits.iter() {
+            crate::api::install_lvd_edit_costume(
+                Some(self.kind_hash),
+                self.costume,
+                lvd_edit.path.clone(),
+                lvd_edit.callback,
             );
         }
     }

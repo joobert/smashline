@@ -6,7 +6,8 @@ use std::{
 use acmd_engine::action::ActionRegistry;
 use rtld::Section;
 use smashline::{
-    Acmd, AcmdFunction, AgentEntry, Costume, Hash40, L2CAgentBase, ObjectEvent, Priority, StatusLine, StringFFI,
+    Acmd, AcmdFunction, AgentEntry, Costume, Hash40, L2CAgentBase, LvdEditCallback, ObjectEvent,
+    Priority, StatusLine, StringFFI,
 };
 
 use crate::{
@@ -79,6 +80,8 @@ pub extern "C" fn smashline_remove_by_plugin_range(start: usize, end: usize) {
             .filter(|cb| !(start..end).contains(&(cb.function as *const () as usize)))
             .collect();
     }
+
+    crate::lvd::remove_by_plugin_range(start, end);
 }
 
 #[no_mangle]
@@ -406,6 +409,32 @@ pub extern "C" fn smashline_update_weapon_count(
     new_count: i32
 ) {
     smashline_update_weapon_count_costume(article_id, Costume::default(), new_count);
+}
+
+#[no_mangle]
+pub extern "C" fn smashline_install_lvd_edit_costume(
+    agent: Option<NonZeroU64>,
+    costume: Costume,
+    lvd_path: StringFFI,
+    callback: LvdEditCallback,
+) {
+    let Some(agent) = agent.map(|x| Hash40(x.get())) else {
+        println!("[smashline] LVD edits require an agent, skipping...");
+        return;
+    };
+
+    mark_costume(agent, costume);
+
+    crate::lvd::install_lvd_edit(agent, costume, lvd_path.as_str().unwrap(), callback);
+}
+
+#[no_mangle]
+pub extern "C" fn smashline_install_lvd_edit(
+    agent: Option<NonZeroU64>,
+    lvd_path: StringFFI,
+    callback: LvdEditCallback,
+) {
+    smashline_install_lvd_edit_costume(agent, Costume::default(), lvd_path, callback);
 }
 
 #[no_mangle]

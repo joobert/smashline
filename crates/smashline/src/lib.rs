@@ -286,6 +286,13 @@ impl IntoLuaConst for smash::lib::LuaConst {
     }
 }
 
+/// Callback used to edit the contents of a loaded LVD file in place.
+///
+/// The callback receives the file's decompressed data and must not change its
+/// length — edit parameter values (vertices, normals, flags, materials, etc.)
+/// rather than adding or removing entries.
+pub type LvdEditCallback = unsafe extern "C" fn(data: *mut u8, len: usize);
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub enum BattleObjectCategory {
@@ -437,6 +444,19 @@ decl_imports! {
         object: StringFFI
     );
 
+    fn smashline_install_lvd_edit_costume(
+        agent: Option<NonZeroU64>,
+        costume: Costume,
+        lvd_path: StringFFI,
+        callback: LvdEditCallback
+    );
+
+    fn smashline_install_lvd_edit(
+        agent: Option<NonZeroU64>,
+        lvd_path: StringFFI,
+        callback: LvdEditCallback
+    );
+
     fn smashline_whitelist_kirby_copy_article(
         fighter_id: i32,
         article_id: i32
@@ -498,6 +518,31 @@ pub fn update_weapon_count_costume(
         costume,
         new_count
     );
+}
+
+/// Registers an edit to an LVD file (e.g. article collision data) that is
+/// applied whenever the owning agent spawns.
+///
+/// `agent` is the agent the LVD file belongs to (e.g. `"pacman_firehydrant"`),
+/// `lvd_path` is the full data.arc path of the file
+/// (e.g. `"fighter/pacman/param/firehydrant.lvd"`).
+pub fn install_lvd_edit(
+    agent: impl AsHash40,
+    lvd_path: impl Into<String>,
+    callback: LvdEditCallback,
+) {
+    install_lvd_edit_costume(agent, Costume::default(), lvd_path, callback);
+}
+
+/// Same as [`install_lvd_edit`], but the edit only applies to agents spawned
+/// on the provided costume slots.
+pub fn install_lvd_edit_costume(
+    agent: impl AsHash40,
+    costume: Costume,
+    lvd_path: impl Into<String>,
+    callback: LvdEditCallback,
+) {
+    api::install_lvd_edit_costume(Some(agent.as_hash40()), costume, lvd_path, callback);
 }
 
 pub fn add_param_object(fighter: impl Into<String>, object: impl Into<String>) {
@@ -614,6 +659,32 @@ pub mod api {
                 std::mem::transmute(original),
             );
         }
+    }
+
+    pub fn install_lvd_edit_costume(
+        agent: Option<Hash40>,
+        costume: Costume,
+        lvd_path: impl Into<String>,
+        callback: LvdEditCallback,
+    ) {
+        smashline_install_lvd_edit_costume(
+            agent.and_then(|x| NonZeroU64::new(extract_hash(x))),
+            costume,
+            StringFFI::from_str(lvd_path),
+            callback,
+        );
+    }
+
+    pub fn install_lvd_edit(
+        agent: Option<Hash40>,
+        lvd_path: impl Into<String>,
+        callback: LvdEditCallback,
+    ) {
+        smashline_install_lvd_edit(
+            agent.and_then(|x| NonZeroU64::new(extract_hash(x))),
+            StringFFI::from_str(lvd_path),
+            callback,
+        );
     }
 
     pub fn install_state_callback_costume(agent: Option<Hash40>, costume: Costume, event: ObjectEvent, function: *const ()) {

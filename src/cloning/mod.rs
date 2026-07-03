@@ -18,6 +18,11 @@ fn fighter_initialize_object_data(
     fighters::CURRENT_PLAYER_ID.store(entry_id as usize, Ordering::Relaxed);
     weapons::CURRENT_OWNER_KIND.store(kind, Ordering::Relaxed);
 
+    // Patch LVD files owned by this fighter before its data is parsed, so
+    // slotted LVD edits only take effect on marked costumes.
+    let costume = crate::utils::get_costume_from_entry_id(entry_id).unwrap_or(0);
+    crate::lvd::apply_lvd_edits_for_fighter(kind, costume);
+
     call_original!(fighter, id, kind, entry_id, hash);
 
     weapons::CURRENT_OWNER_KIND.store(-1, Ordering::Relaxed);
