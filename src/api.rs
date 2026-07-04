@@ -453,6 +453,7 @@ pub extern "C" fn smashline_install_lvd_edit_costume(
     costume: Costume,
     lvd_path: StringFFI,
     callback: LvdEditCallback,
+    user_data: *const (),
 ) {
     let Some(agent) = agent.map(|x| Hash40(x.get())) else {
         println!("[smashline] LVD edits require an agent, skipping...");
@@ -461,7 +462,7 @@ pub extern "C" fn smashline_install_lvd_edit_costume(
 
     mark_costume(agent, costume);
 
-    crate::lvd::install_lvd_edit(agent, costume, lvd_path.as_str().unwrap(), callback);
+    crate::lvd::install_lvd_edit(agent, costume, lvd_path.as_str().unwrap(), callback, user_data);
 }
 
 #[no_mangle]
@@ -469,8 +470,9 @@ pub extern "C" fn smashline_install_lvd_edit(
     agent: Option<NonZeroU64>,
     lvd_path: StringFFI,
     callback: LvdEditCallback,
+    user_data: *const (),
 ) {
-    smashline_install_lvd_edit_costume(agent, Costume::default(), lvd_path, callback);
+    smashline_install_lvd_edit_costume(agent, Costume::default(), lvd_path, callback, user_data);
 }
 
 #[no_mangle]
