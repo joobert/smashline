@@ -1,4 +1,4 @@
-use crate::{AsHash40, Costume, ObjectEvent, Priority, StatusLine};
+use crate::{AsAgentIdent, AsHash40, Costume, LvdEdits, ObjectEvent, Priority, StatusLine};
 
 pub type AcmdFunction = unsafe extern "C" fn(&mut crate::L2CAgentBase);
 
@@ -97,11 +97,12 @@ struct WeaponCount {
 
 struct LvdEdit {
     path: String,
-    callback: crate::LvdEditCallback,
+    user_data: *const (),
 }
 
 pub struct Agent {
     kind_hash: crate::Hash40,
+    name: Option<String>,
     costume: Costume,
     acmd: Vec<AcmdScript>,
     lines: Vec<LineCallback>,
@@ -112,9 +113,11 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(agent: impl AsHash40) -> Self {
+    pub fn new(agent: impl AsAgentIdent) -> Self {
+        let (kind_hash, name) = agent.as_agent_ident();
         Self {
-            kind_hash: agent.as_hash40(),
+            kind_hash,
+            name,
             costume: Costume::default(),
             acmd: vec![],
             lines: vec![],
@@ -257,22 +260,59 @@ impl Agent {
         self
     }
 
-    /// Registers an edit to an LVD file belonging to this agent (e.g. article
-    /// collision data such as pacman's firehydrant). The callback receives the
-    /// file's data whenever the agent spawns and may edit parameter values in
-    /// place, but must not change the file's length.
+    /// Applies declarative edits to this agent's LVD file (e.g. article
+    /// collision data such as pacman's firehydrant), with the path inferred
+    /// from the agent name: `"pacman_firehydrant"` →
+    /// `"fighter/pacman/model/firehydrant/c00/firehydrant.lvd"`.
     ///
-    /// If a costume was set with `set_costume`, the edit only applies to
-    /// instances spawned on those costume slots — other slots keep the
+    /// The edits are re-applied from the vanilla data every time the agent
+    /// spawns or activates. If a costume was set with `set_costume`, they
+    /// only apply to instances on those costume slots — other slots keep the
     /// unmodified file.
-    pub fn lvd_edit(
+    ///
+    /// ```ignore
+    /// Agent::new("pacman_firehydrant")
+    ///     .set_costume(vec![40])
+    ///     .lvd_edit(collisions()
+    ///         .entry(name("COL_curve1"))
+    ///         .materials(line_material(GroundCollAttr::GROUND_COLL_ATTR_WOOD)
+    ///             .line_flags(throughable(true))))
+    ///     .install();
+    /// ```
+    pub fn lvd_edit(&mut self, edits: impl Into<LvdEdits>) -> &mut Self {
+        let path = match &self.name {
+            Some(name) => crate::lvd_edits::inferred_lvd_path(name),
+            None => panic!(
+                "smashline: Agent::lvd_edit requires the agent to be created from a name \
+                 string so the LVD path can be inferred; use lvd_edit_file instead"
+            ),
+        };
+
+        self.lvd_edit_file(path, edits)
+    }
+
+    /// Same as [`Agent::lvd_edit`], but with an explicit LVD file path for
+    /// files that don't follow the standard layout.
+    pub fn lvd_edit_file(
         &mut self,
         lvd_path: impl Into<String>,
-        callback: crate::LvdEditCallback,
+        edits: impl Into<LvdEdits>,
+    ) -> &mut Self {
+        let edits = edits.into();
+        self.lvd_edit_with(lvd_path, move |lvd| edits.apply(lvd))
+    }
+
+    /// Escape hatch for edits [`LvdEdits`] can't express: the closure receives
+    /// the fully parsed LVD file and may change any values, but must not add
+    /// or remove entries (the file size has to stay the same).
+    pub fn lvd_edit_with(
+        &mut self,
+        lvd_path: impl Into<String>,
+        edit: impl Fn(&mut crate::lvd::LvdFile) + 'static,
     ) -> &mut Self {
         self.lvd_edits.push(LvdEdit {
             path: lvd_path.into(),
-            callback,
+            user_data: crate::leak_lvd_closure(edit),
         });
 
         self
@@ -348,7 +388,8 @@ impl Agent {
                 Some(self.kind_hash),
                 self.costume,
                 lvd_edit.path.clone(),
-                lvd_edit.callback,
+                crate::lvd_edit_trampoline,
+                lvd_edit.user_data,
             );
         }
     }

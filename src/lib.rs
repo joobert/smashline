@@ -97,7 +97,7 @@
 #![allow(unused)]
 #![allow(non_snake_case)]
 #![allow(static_mut_refs)]
-#![allow(elided_named_lifetimes)]
+#![allow(mismatched_lifetime_syntaxes)]
 
 mod cloning;
 

@@ -7,7 +7,9 @@ edition = "2021"
 
 [dependencies]
 acmd-engine.path = "../acmd-engine"
+binrw = "0.9.2"
 locks.path = "../locks"
+smash-lvd = "0.4.0"
 smash-rs = { package = "smash", git = "https://github.com/WuBoytH/smash-rs", optional = true }
 smashline-macro.path = "../smashline-macro"
 skyline.workspace = true

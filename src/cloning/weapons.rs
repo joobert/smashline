@@ -103,9 +103,9 @@ pub struct StaticFighterData {
 pub struct ArticleDescriptor {
     pub weapon_id: i32,
     pub max_count: i32,
-    pub on_init_callback: extern "C" fn(*const u64, *mut BattleObjectModuleAccessor) -> i32,
+    pub on_init_callback: Option<extern "C" fn(*const u64, *mut BattleObjectModuleAccessor) -> i32>,
     // could also be on shoot
-    pub on_fini_callback: extern "C" fn(*const u64, *mut BattleObjectModuleAccessor) -> i32,
+    pub on_fini_callback: Option<extern "C" fn(*const u64, *mut BattleObjectModuleAccessor) -> i32>,
     pub extra: u64,
 }
 
@@ -403,8 +403,8 @@ unsafe fn kirby_get_copy_articles(ctx: &mut InlineCtx, store_reg: usize) {
                     new_descriptors.push(ArticleDescriptor{
                         weapon_id: article.weapon_id,
                         max_count: 0,
-                        on_init_callback: unsafe { std::mem::transmute(0u64) },
-                        on_fini_callback: unsafe { std::mem::transmute(0u64) },
+                        on_init_callback: None,
+                        on_fini_callback: None,
                         extra: 0
                     })
                 }

@@ -6,8 +6,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub use smashline_macro::*;
 
 mod builder;
+mod lvd_edits;
 
 pub use builder::*;
+pub use lvd_edits::*;
 
 #[cfg(all(not(feature = "smash-rs"), feature = "skyline_smash"))]
 pub use smash::{
@@ -251,6 +253,36 @@ impl AsHash40 for Hash40 {
     }
 }
 
+/// Types that can identify an agent, keeping the original name string when
+/// one is available (so things like LVD paths can be inferred from it).
+pub trait AsAgentIdent {
+    fn as_agent_ident(self) -> (Hash40, Option<String>);
+}
+
+impl AsAgentIdent for &str {
+    fn as_agent_ident(self) -> (Hash40, Option<String>) {
+        (self.as_hash40(), Some(self.to_string()))
+    }
+}
+
+impl AsAgentIdent for String {
+    fn as_agent_ident(self) -> (Hash40, Option<String>) {
+        (self.as_str().as_hash40(), Some(self))
+    }
+}
+
+impl AsAgentIdent for u64 {
+    fn as_agent_ident(self) -> (Hash40, Option<String>) {
+        (self.as_hash40(), None)
+    }
+}
+
+impl AsAgentIdent for Hash40 {
+    fn as_agent_ident(self) -> (Hash40, Option<String>) {
+        (self, None)
+    }
+}
+
 pub trait IntoLuaConst {
     fn into_lua_const(self) -> LuaConst;
 }
@@ -286,12 +318,66 @@ impl IntoLuaConst for smash::lib::LuaConst {
     }
 }
 
-/// Callback used to edit the contents of a loaded LVD file in place.
+/// Re-export of the `smash-lvd` crate used by the typed LVD editing API.
+pub use lvd;
+
+/// Re-exported for convenience so LVD edits can name ground attributes
+/// without importing from [`lvd`] directly.
+pub use lvd::GroundCollAttr;
+
+/// Raw callback used to edit the contents of a loaded LVD file in place.
 ///
 /// The callback receives the file's decompressed data and must not change its
 /// length — edit parameter values (vertices, normals, flags, materials, etc.)
-/// rather than adding or removing entries.
-pub type LvdEditCallback = unsafe extern "C" fn(data: *mut u8, len: usize);
+/// rather than adding or removing entries. `user_data` is the opaque pointer
+/// supplied at registration.
+///
+/// Most users should prefer the typed API ([`install_lvd_edit`],
+/// [`Agent::lvd_edit`]) which wraps this with `lvd` crate parsing.
+pub type LvdEditCallback = unsafe extern "C" fn(data: *mut u8, len: usize, user_data: *const ());
+
+type LvdEditClosure = Box<dyn Fn(&mut lvd::LvdFile)>;
+
+/// The trampoline behind the typed LVD editing API: parses the raw file data,
+/// runs the user closure over it, and writes it back if the size is unchanged.
+unsafe extern "C" fn lvd_edit_trampoline(data: *mut u8, len: usize, user_data: *const ()) {
+    use binrw::BinReaderExt;
+
+    let closure = &*(user_data as *const LvdEditClosure);
+    let buffer = std::slice::from_raw_parts_mut(data, len);
+
+    let mut file: lvd::LvdFile = match binrw::io::Cursor::new(&buffer[..]).read_be() {
+        Ok(file) => file,
+        Err(e) => {
+            println!("[smashline::lvd] failed to parse LVD file: {e}");
+            return;
+        }
+    };
+
+    closure(&mut file);
+
+    let mut out = binrw::io::Cursor::new(Vec::with_capacity(len));
+    if let Err(e) = file.write(&mut out) {
+        println!("[smashline::lvd] failed to rebuild LVD file: {e}");
+        return;
+    }
+
+    let out = out.into_inner();
+    if out.len() != len {
+        println!(
+            "[smashline::lvd] edit changed the file size ({len} -> {}), skipping. \
+             Only edit values, do not add or remove entries.",
+            out.len()
+        );
+        return;
+    }
+
+    buffer.copy_from_slice(&out);
+}
+
+fn leak_lvd_closure(closure: impl Fn(&mut lvd::LvdFile) + 'static) -> *const () {
+    Box::into_raw(Box::new(Box::new(closure) as LvdEditClosure)) as *const ()
+}
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -448,13 +534,15 @@ decl_imports! {
         agent: Option<NonZeroU64>,
         costume: Costume,
         lvd_path: StringFFI,
-        callback: LvdEditCallback
+        callback: LvdEditCallback,
+        user_data: *const ()
     );
 
     fn smashline_install_lvd_edit(
         agent: Option<NonZeroU64>,
         lvd_path: StringFFI,
-        callback: LvdEditCallback
+        callback: LvdEditCallback,
+        user_data: *const ()
     );
 
     fn smashline_whitelist_kirby_copy_article(
@@ -521,28 +609,79 @@ pub fn update_weapon_count_costume(
 }
 
 /// Registers an edit to an LVD file (e.g. article collision data) that is
-/// applied whenever the owning agent spawns.
+/// applied whenever the owning agent spawns or activates. The vanilla file is
+/// always used as the base — edits from previous applications never stack.
 ///
-/// `agent` is the agent the LVD file belongs to (e.g. `"pacman_firehydrant"`),
-/// `lvd_path` is the full data.arc path of the file
-/// (e.g. `"fighter/pacman/param/firehydrant.lvd"`).
+/// `agent` is the agent the LVD file belongs to (e.g. `"pacman_firehydrant"`,
+/// the owner fighter also works), `lvd_path` is the full data.arc path of the
+/// file (e.g. `"fighter/pacman/model/firehydrant/c00/firehydrant.lvd"`).
+///
+/// ```ignore
+/// smashline::install_lvd_edit("pacman_firehydrant", "fighter/pacman/model/firehydrant/c00/firehydrant.lvd", |lvd| {
+///     for collision in lvd.collisions.iter_mut() {
+///         for material in collision.materials.iter_mut() {
+///             material.line_flags.set_throughable(true);
+///         }
+///     }
+/// });
+/// ```
 pub fn install_lvd_edit(
     agent: impl AsHash40,
     lvd_path: impl Into<String>,
-    callback: LvdEditCallback,
+    edit: impl Fn(&mut lvd::LvdFile) + 'static,
 ) {
-    install_lvd_edit_costume(agent, Costume::default(), lvd_path, callback);
+    install_lvd_edit_costume(agent, Costume::default(), lvd_path, edit);
+}
+
+/// Registers a declarative [`LvdEdits`] set for an agent, inferring the LVD
+/// path from the agent's name (`"pacman_firehydrant"` →
+/// `"fighter/pacman/model/firehydrant/c00/firehydrant.lvd"`).
+///
+/// ```ignore
+/// smashline::install_lvd_edits(
+///     "pacman_firehydrant",
+///     collisions().materials(throughable(true)),
+/// );
+/// ```
+pub fn install_lvd_edits(agent: impl AsAgentIdent, edits: impl Into<LvdEdits>) {
+    install_lvd_edits_costume(agent, Costume::default(), edits);
+}
+
+/// Same as [`install_lvd_edits`], but the edits only apply to agents spawned
+/// on the provided costume slots.
+pub fn install_lvd_edits_costume(
+    agent: impl AsAgentIdent,
+    costume: Costume,
+    edits: impl Into<LvdEdits>,
+) {
+    let edits = edits.into();
+    let (hash, name) = agent.as_agent_ident();
+    let Some(name) = name else {
+        panic!(
+            "smashline: install_lvd_edits requires the agent to be given by name \
+             so the LVD path can be inferred; use install_lvd_edit_costume with an explicit path instead"
+        );
+    };
+
+    let path = lvd_edits::inferred_lvd_path(&name);
+    api::install_lvd_edit_costume(
+        Some(hash),
+        costume,
+        path,
+        lvd_edit_trampoline,
+        leak_lvd_closure(move |lvd| edits.apply(lvd)),
+    );
 }
 
 /// Same as [`install_lvd_edit`], but the edit only applies to agents spawned
-/// on the provided costume slots.
+/// on the provided costume slots. Other slots keep the unmodified file.
 pub fn install_lvd_edit_costume(
     agent: impl AsHash40,
     costume: Costume,
     lvd_path: impl Into<String>,
-    callback: LvdEditCallback,
+    edit: impl Fn(&mut lvd::LvdFile) + 'static,
 ) {
-    api::install_lvd_edit_costume(Some(agent.as_hash40()), costume, lvd_path, callback);
+    api::install_lvd_edit_costume(Some(agent.as_hash40()), costume, lvd_path, lvd_edit_trampoline, leak_lvd_closure(edit));
 }
 
 pub fn add_param_object(fighter: impl Into<String>, object: impl Into<String>) {
@@ -666,12 +805,14 @@ pub mod api {
         costume: Costume,
         lvd_path: impl Into<String>,
         callback: LvdEditCallback,
+        user_data: *const (),
     ) {
         smashline_install_lvd_edit_costume(
             agent.and_then(|x| NonZeroU64::new(extract_hash(x))),
             costume,
             StringFFI::from_str(lvd_path),
             callback,
+            user_data,
         );
     }
 
@@ -679,11 +820,13 @@ pub mod api {
         agent: Option<Hash40>,
         lvd_path: impl Into<String>,
         callback: LvdEditCallback,
+        user_data: *const (),
     ) {
         smashline_install_lvd_edit(
             agent.and_then(|x| NonZeroU64::new(extract_hash(x))),
             StringFFI::from_str(lvd_path),
             callback,
+            user_data,
         );
     }
 

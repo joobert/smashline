@@ -93,14 +93,20 @@ fn call_callback(fighter: &mut L2CFighterBase, callback: Callback, _ctx: &Inline
 
 #[inline(always)]
 fn call_callback1(fighter: &mut L2CFighterBase, callback: Callback1, ctx: &InlineCtx) {
-    let arg = unsafe { std::mem::transmute(ctx.registers[1].x()) };
+    let arg = unsafe {
+        &mut *std::ptr::with_exposed_provenance_mut::<L2CValue>(ctx.registers[1].x() as usize)
+    };
     callback(fighter, arg);
 }
 
 #[inline(always)]
 fn call_callback2(fighter: &mut L2CFighterBase, callback: Callback2, ctx: &InlineCtx) {
-    let arg = unsafe { std::mem::transmute(ctx.registers[2].x()) };
-    let arg2 = unsafe { std::mem::transmute(ctx.registers[3].x()) };
+    let arg = unsafe {
+        &mut *std::ptr::with_exposed_provenance_mut::<L2CValue>(ctx.registers[2].x() as usize)
+    };
+    let arg2 = unsafe {
+        &mut *std::ptr::with_exposed_provenance_mut::<L2CValue>(ctx.registers[3].x() as usize)
+    };
     callback(fighter, arg, arg2);
 }
 
@@ -108,8 +114,9 @@ macro_rules! decl_functions {
     ($($name:ident($line:ident, $offset:expr, $code_cave:expr, $reg:expr) => $call_fn:ident);*) => {
         $(
             extern "C" fn $name(ctx: &InlineCtx) {
-                let fighter: &'static mut L2CFighterBase =
-                    unsafe { std::mem::transmute(ctx.registers[$reg].x()) };
+                let fighter: &'static mut L2CFighterBase = unsafe {
+                    &mut *std::ptr::with_exposed_provenance_mut(ctx.registers[$reg].x() as usize)
+                };
                     
                 let fighter = std::hint::black_box(fighter);
 

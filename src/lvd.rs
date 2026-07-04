@@ -19,7 +19,13 @@ pub struct LvdEdit {
     pub path: String,
     pub costume: Costume,
     pub callback: LvdEditCallback,
+    pub user_data: *const (),
 }
+
+// The user data is only ever handed back to the callback it was registered
+// with; the plugin itself never dereferences it.
+unsafe impl Send for LvdEdit {}
+unsafe impl Sync for LvdEdit {}
 
 pub static LVD_EDITS: RwLock<Vec<LvdEdit>> = RwLock::new(Vec::new());
 
@@ -70,7 +76,7 @@ fn loaded_file_slice(file: u64, path: &str) -> Option<&'static mut [u8]> {
     Some(unsafe { std::slice::from_raw_parts_mut(data.data.cast_mut(), size) })
 }
 
-pub fn install_lvd_edit(agent: Hash40, costume: Costume, path: &str, callback: LvdEditCallback) {
+pub fn install_lvd_edit(agent: Hash40, costume: Costume, path: &str, callback: LvdEditCallback, user_data: *const ()) {
     println!(
         "[smashline::lvd] registered edit for agent {:#x} on '{}' (slots: {:?})",
         agent.0,
@@ -84,6 +90,7 @@ pub fn install_lvd_edit(agent: Hash40, costume: Costume, path: &str, callback: L
         path: path.to_string(),
         costume,
         callback,
+        user_data,
     });
 }
 
@@ -131,7 +138,7 @@ fn apply_edits_filtered(predicate: impl Fn(&LvdEdit) -> bool, costume: i32) {
             }
 
             unsafe {
-                (edit.callback)(buffer.as_mut_ptr(), buffer.len());
+                (edit.callback)(buffer.as_mut_ptr(), buffer.len(), edit.user_data);
             }
             applied += 1;
         }
