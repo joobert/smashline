@@ -6,7 +6,7 @@ use std::{
 
 use locks::RwLock;
 use skyline::hooks::InlineCtx;
-use smashline::{skyline_smash::app::BattleObjectModuleAccessor, Hash40};
+use smashline::{skyline_smash::app::BattleObjectModuleAccessor, Costume, Hash40};
 
 use crate::create_agent::{LOWERCASE_FIGHTER_NAMES, LOWERCASE_WEAPON_CATEGORY_NAMES, LOWERCASE_WEAPON_NAMES, LOWERCASE_WEAPON_OWNER_NAMES, WEAPON_OWNER_CATEGORIES, WEAPON_OWNER_IDS};
 
@@ -355,7 +355,7 @@ pub static CURRENT_KIRBY_COPY: AtomicI32 = AtomicI32::new(-1);
 
 pub static KIRBY_COPY_ARTICLE_WHITELIST: RwLock<BTreeMap<i32, Vec<i32>>> = RwLock::new(BTreeMap::new());
 
-static FIGHTER_DATA_CACHE: RwLock<BTreeMap<i32, &'static StaticFighterData>> =
+static FIGHTER_DATA_CACHE: RwLock<BTreeMap<(i32, i32), &'static StaticFighterData>> =
     RwLock::new(BTreeMap::new());
 static KIRBY_COPY_DATA_CACHE: RwLock<BTreeMap<i32, &'static StaticArticleData>> =
     RwLock::new(BTreeMap::new());
@@ -399,6 +399,49 @@ pub struct ArticleDescriptor {
     // could also be on shoot
     pub on_fini_callback: unsafe extern "C" fn(*mut u64, *mut BattleObjectModuleAccessor) -> i32,
     pub extra: u64,
+}
+
+pub struct WeaponCountUpdate {
+    /// Never empty: unslotted counts live in `ARTICLE_DESCRIPTOR_REPLACE`.
+    pub costume: Costume,
+    /// Generate article id -> max count
+    pub counts: BTreeMap<i32, i32>,
+}
+
+pub static WEAPON_COUNT_COSTUME_UPDATE: RwLock<BTreeMap<i32, Vec<WeaponCountUpdate>>> =
+    RwLock::new(BTreeMap::new());
+
+/// The costume slotted weapon counts for `kind` should resolve against, or `NO_COSTUME` when none
+/// apply. Normalizing to `NO_COSTUME` keeps the article cache at one entry per fighter unless a
+/// slotted count actually targets the costume being initialized.
+fn weapon_count_costume(kind: i32) -> i32 {
+    use crate::cloning::fighters::{CURRENT_INIT_COSTUME, CURRENT_PLAYER_ID, NO_COSTUME};
+
+    // Kirby copy lookups happen on Kirby's behalf, never the copied fighter's costume.
+    if CURRENT_KIRBY_COPY.load(Ordering::Relaxed) != -1 {
+        return NO_COSTUME;
+    }
+
+    let updates = WEAPON_COUNT_COSTUME_UPDATE.read();
+    let Some(updates) = updates.get(&kind) else {
+        return NO_COSTUME;
+    };
+
+    let mut costume = CURRENT_INIT_COSTUME.load(Ordering::Relaxed);
+    if costume == NO_COSTUME {
+        let entry_id = CURRENT_PLAYER_ID.load(Ordering::Relaxed);
+        if entry_id <= 7 {
+            costume = crate::utils::get_costume_from_entry_id(entry_id as i32).unwrap_or(NO_COSTUME);
+        }
+    }
+
+    if costume != NO_COSTUME
+        && updates.iter().any(|update| update.costume.as_slice().contains(&(costume as usize)))
+    {
+        costume
+    } else {
+        NO_COSTUME
+    }
 }
 
 pub static ARTICLE_DESCRIPTOR_REPLACE: RwLock<BTreeMap<i32, BTreeMap<i32, ArticleDescriptorReplace>>> = RwLock::new(BTreeMap::new());
@@ -485,7 +528,9 @@ fn get_static_fighter_data(kind: i32) -> *const StaticFighterData {
         return original_data;
     }
 
-    if let Some(cached) = FIGHTER_DATA_CACHE.read().get(&kind) {
+    let costume = weapon_count_costume(kind);
+
+    if let Some(cached) = FIGHTER_DATA_CACHE.read().get(&(kind, costume)) {
         return *cached as *const StaticFighterData;
     }
 
@@ -545,6 +590,19 @@ fn get_static_fighter_data(kind: i32) -> *const StaticFighterData {
         }
     }
 
+    // Slotted counts win over the unslotted ones above, for the costume being initialized only.
+    if costume != crate::cloning::fighters::NO_COSTUME {
+        if let Some(updates) = WEAPON_COUNT_COSTUME_UPDATE.read().get(&kind) {
+            for update in updates.iter().filter(|update| update.costume.as_slice().contains(&(costume as usize))) {
+                for (generate_article_id, new_count) in update.counts.iter() {
+                    if let Some(article) = new_descriptors.get_mut(*generate_article_id as usize) {
+                        article.max_count = *new_count;
+                    }
+                }
+            }
+        }
+    }
+
     // The flag-based article routing (see the inline hooks above) sizes the weapon pool with the
     // same prefix sums the game uses, but an item row with an "unlimited" (-1) count cannot be
     // represented there: a weapon row placed after one would alias an earlier weapon's pool slots.
@@ -575,7 +633,7 @@ fn get_static_fighter_data(kind: i32) -> *const StaticFighterData {
     new_fighter_data.static_article_info = static_article_info as *const StaticArticleData;
     let leaked: &'static StaticFighterData = Box::leak(new_fighter_data);
 
-    FIGHTER_DATA_CACHE.write().insert(kind, leaked);
+    FIGHTER_DATA_CACHE.write().insert((kind, costume), leaked);
 
     leaked
 }

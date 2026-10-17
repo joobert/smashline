@@ -197,14 +197,12 @@ pub fn apply_lvd_edits_for_fighter(kind: i32, costume: i32) {
         }
     }
 
-    for agents in crate::cloning::weapons::NEW_AGENTS.read().values() {
-        for agent in agents.iter() {
-            if agent.owner_id == kind {
-                candidates.push(Hash40::new(&format!(
-                    "{}_{}",
-                    agent.owner_name, agent.new_name
-                )));
-            }
+    for agent in crate::cloning::weapons::NEW_AGENTS.read().iter() {
+        if agent.owner_id == kind {
+            candidates.push(Hash40::new(&format!(
+                "{}_{}",
+                agent.owner_name, agent.article_name
+            )));
         }
     }
 

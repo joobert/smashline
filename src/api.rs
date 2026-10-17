@@ -429,6 +429,35 @@ pub extern "C" fn smashline_update_weapon_count(
 }
 
 #[no_mangle]
+pub extern "C" fn smashline_update_weapon_count_costume(
+    fighter_id: i32,
+    costume: Costume,
+    generate_article_id: i32,
+    new_count: i32
+) {
+    if costume.as_slice().is_empty() {
+        smashline_update_weapon_count(fighter_id, generate_article_id, new_count);
+        return;
+    }
+
+    let mut update_map = crate::cloning::weapons::WEAPON_COUNT_COSTUME_UPDATE.write();
+    let updates = update_map.entry(fighter_id).or_default();
+
+    match updates.iter_mut().find(|update| update.costume.as_slice() == costume.as_slice()) {
+        Some(update) => {
+            update.counts.insert(generate_article_id, new_count);
+        }
+        None => updates.push(crate::cloning::weapons::WeaponCountUpdate {
+            costume,
+            counts: std::collections::BTreeMap::from([(generate_article_id, new_count)]),
+        }),
+    }
+
+    drop(update_map);
+    crate::cloning::weapons::invalidate_article_cache();
+}
+
+#[no_mangle]
 pub extern "C" fn smashline_replace_article_descriptor_func(
     fighter_id: i32,
     generate_article_id: i32,

@@ -539,6 +539,13 @@ decl_imports! {
         new_count: i32
     );
 
+    fn smashline_update_weapon_count_costume(
+        fighter_id: i32,
+        costume: Costume,
+        generate_article_id: i32,
+        new_count: i32
+    );
+
     fn smashline_replace_article_descriptor_func(
         fighter_id: i32,
         generate_article_id: i32,
@@ -653,6 +660,23 @@ pub fn update_weapon_count(
 ) {
     smashline_update_weapon_count(
         fighter_id,
+        generate_article_id,
+        new_count
+    );
+}
+
+/// Same as [`update_weapon_count`], but the count only applies to fighters spawned on the given
+/// costume slots. It takes priority over an unslotted count for the same article on those slots;
+/// every other slot keeps the unslotted (or vanilla) count.
+pub fn update_weapon_count_costume(
+    fighter_id: i32,
+    costume: Costume,
+    generate_article_id: i32,
+    new_count: i32
+) {
+    smashline_update_weapon_count_costume(
+        fighter_id,
+        costume,
         generate_article_id,
         new_count
     );

@@ -90,6 +90,12 @@ struct StatusScript {
     function: *const (),
 }
 
+struct WeaponCount {
+    fighter_id: i32,
+    generate_article_id: i32,
+    count: i32,
+}
+
 struct LvdEdit {
     path: String,
     user_data: *const (),
@@ -103,6 +109,7 @@ pub struct Agent {
     lines: Vec<LineCallback>,
     status: Vec<StatusScript>,
     events: Vec<StateCallback>,
+    weapon_counts: Vec<WeaponCount>,
     lvd_edits: Vec<LvdEdit>,
 }
 
@@ -117,6 +124,7 @@ impl Agent {
             lines: vec![],
             status: vec![],
             events: vec![],
+            weapon_counts: vec![],
             lvd_edits: vec![],
         }
     }
@@ -311,6 +319,15 @@ impl Agent {
         self
     }
 
+    /// Overrides the max spawn count of one of `fighter_id`'s articles, by generate article id
+    /// (cloned articles included). If a costume was set with `set_costume`, the override only
+    /// applies to fighters on those costume slots.
+    pub fn update_weapon_count(&mut self, fighter_id: i32, generate_article_id: i32, count: i32) -> &mut Self {
+        self.weapon_counts.push(WeaponCount { fighter_id, generate_article_id, count });
+
+        self
+    }
+
     pub fn on_end<T>(&mut self, func: StateFunction<T>) -> &mut Self {
         self.events.push(StateCallback {
             event: ObjectEvent::End,
@@ -362,8 +379,9 @@ impl Agent {
 
         for weapon_count in self.weapon_counts.iter() {
             crate::update_weapon_count_costume(
-                weapon_count.article_id,
+                weapon_count.fighter_id,
                 self.costume,
+                weapon_count.generate_article_id,
                 weapon_count.count,
             );
         }
