@@ -302,7 +302,7 @@ extern "C" fn clone_reimpl(object: &FighterParamHolder) -> *mut FighterParamHold
 
 static CREATED_FIGHTER: AtomicI32 = AtomicI32::new(-1);
 
-#[skyline::hook(offset = 0x70c580)]
+#[skyline::hook(offset = offsets::ver!(0x70c580, 0x70c580))]
 unsafe fn fighter_create_param_object(arg: u64, kind: i32, fpi: &i32) -> bool {
     CREATED_FIGHTER.store(kind, Ordering::Relaxed);
     let val = call_original!(arg, kind, fpi);
@@ -310,7 +310,7 @@ unsafe fn fighter_create_param_object(arg: u64, kind: i32, fpi: &i32) -> bool {
     val
 }
 
-#[skyline::hook(offset = 0x37209b4 + 0x5B0, inline)]
+#[skyline::hook(offset = offsets::ver!(0x37209b4 + 0x5B0, 0x37209b4), inline)]
 unsafe fn init_fighter_p_object(ctx: &InlineCtx) {
     let func: extern "C" fn(u64, u64) = std::mem::transmute(ctx.registers[8].x());
 
@@ -395,6 +395,6 @@ unsafe fn init_fighter_p_object(ctx: &InlineCtx) {
 }
 
 pub fn install_param_hooks() {
-    skyline::patching::Patch::in_text(0x37209b4 + 0x5B0).nop().unwrap();
+    skyline::patching::Patch::in_text(offsets::ver!(0x37209b4 + 0x5B0, 0x37209b4)).nop().unwrap();
     skyline::install_hooks!(fighter_create_param_object, init_fighter_p_object);
 }

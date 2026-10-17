@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 skyline.workspace = true
+offsets.path = "../offsets"
 smash-arc = { git = "https://github.com/jam1garner/smash-arc", features = ["rust-zstd", "smash-runtime"] }

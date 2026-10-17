@@ -43,6 +43,7 @@ rtld.path = "crates/rtld"
 once_cell = "1"
 prc-rs = { version = "1.6.1", features = ["indexmap-std"] }
 resources.path = "crates/resources"
+offsets.path = "crates/offsets"
 smash_script = { git = "https://github.com/WuBoytH/smash-script", branch = "development" }
 
 # [patch.'https://github.com/WuBoytH/smash-rs']

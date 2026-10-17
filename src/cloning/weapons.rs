@@ -161,16 +161,16 @@ pub fn code_dependencies_of(owner_kind: i32) -> Vec<i32> {
     deps
 }
 
-#[skyline::from_offset(0x33b01b0)]
+#[skyline::from_offset(offsets::ver!(0x33b01b0, 0x33afc00))]
 fn get_weapon_base_kind(kind: i32) -> i32;
 
-#[skyline::hook(offset = 0x33b01b0)]
+#[skyline::hook(offset = offsets::ver!(0x33b01b0, 0x33afc00))]
 fn get_weapon_base_kind_hook(kind: i32) -> i32 {
     let kind = original_kind_of(kind).unwrap_or(kind);
     call_original!(kind)
 }
 
-#[skyline::hook(offset = 0x33aa790)]
+#[skyline::hook(offset = offsets::ver!(0x33aa790, 0x33aa1e0))]
 fn get_static_weapon_data_hook(kind: i32) -> *const u8 {
     let kind = original_kind_of(kind).unwrap_or(kind);
     call_original!(kind)
@@ -180,7 +180,7 @@ pub static WEAPON_VTABLE_UPDATE: RwLock<BTreeMap<i32, BTreeMap<usize, usize>>> =
 
 pub const WEAPON_VTABLE_SLOTS: usize = 104;
 
-#[skyline::hook(offset = 0x33bed40)]
+#[skyline::hook(offset = offsets::ver!(0x33bed40, 0x33be790))]
 pub fn get_weapon_vtable_hook(kind: i32) -> *const usize {
     if RESOLVE_AS_ORIGINAL.load(Ordering::Relaxed) {
         let original_kind = original_kind_of(kind).unwrap_or(kind);
@@ -225,14 +225,14 @@ pub fn get_weapon_vtable_hook(kind: i32) -> *const usize {
     patched as *const WeaponVtable as *const usize
 }
 
-#[skyline::hook(offset = 0x33b64e4, inline)]
+#[skyline::hook(offset = offsets::ver!(0x33b64e4, 0x33b5f34), inline)]
 unsafe fn weapon_init_factory_kind(ctx: &mut InlineCtx) {
     if let Some(original) = original_kind_of(ctx.registers[28].x() as i32) {
         ctx.registers[8].set_x(get_weapon_base_kind(original) as u64);
     }
 }
 
-#[skyline::hook(offset = 0x33b6b1c, inline)]
+#[skyline::hook(offset = offsets::ver!(0x33b6b1c, 0x33b656c), inline)]
 unsafe fn weapon_init_owner_category(ctx: &mut InlineCtx) {
     if let Some(original) = original_kind_of(ctx.registers[21].x() as i32) {
         let category = WEAPON_OWNER_CATEGORIES.get(original as usize).unwrap();
@@ -284,7 +284,7 @@ fn article_count_for(is_item: bool) -> u64 {
 }
 
 /// `Initialize`, `tbnz w11, #0` on the row's flags byte: clear the bit so the count covers every row.
-#[skyline::hook(offset = 0x3a62c0, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3a62c0, 0x3a62c0), inline)]
 unsafe fn article_init_count_all_rows(ctx: &mut InlineCtx) {
     let flags = ctx.registers[11].x();
     ctx.registers[11].set_x(flags & !1);
@@ -294,7 +294,7 @@ unsafe fn article_init_count_all_rows(ctx: &mut InlineCtx) {
 /// rows may use -1 for "unlimited", which the vanilla loop never saw; reserve 0 slots for those
 /// instead of 4 billion. Non-negative item rows keep reserving their (unused) slots so the prefix-sum
 /// slot math of the other consumers stays consistent.
-#[skyline::hook(offset = 0x3a62fc, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3a62fc, 0x3a62fc), inline)]
 unsafe fn article_init_pool_skip_unlimited_items(ctx: &mut InlineCtx) {
     let row = ctx.registers[11].x();
     if is_item_descriptor(row) && (ctx.registers[12].x() as u32 as i32) < 0 {
@@ -304,7 +304,7 @@ unsafe fn article_init_pool_skip_unlimited_items(ctx: &mut InlineCtx) {
 
 /// `InitializeArticles`, right after `bl GetArticleUseTypeMask`: x19 = current descriptor. Zero the
 /// returned use-type mask (w0) for item rows so they are not instantiated as weapons.
-#[skyline::hook(offset = 0x3a64e0, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3a64e0, 0x3a64e0), inline)]
 unsafe fn article_init_skip_item_rows(ctx: &mut InlineCtx) {
     if is_item_descriptor(ctx.registers[19].x()) {
         ctx.registers[0].set_x(0);
@@ -312,7 +312,7 @@ unsafe fn article_init_skip_item_rows(ctx: &mut InlineCtx) {
 }
 
 /// `DestroyArticles`, right after `bl GetArticleUseTypeMask`: x21 = `ArticleModuleInternal`, x22 = row.
-#[skyline::hook(offset = 0x3d3ffc, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3d3ffc, 0x3d3ffc), inline)]
 unsafe fn article_destroy_skip_item_rows(ctx: &mut InlineCtx) {
     if is_item_descriptor(descriptor_from_internal(ctx.registers[21].x(), ctx.registers[22].x())) {
         ctx.registers[0].set_x(0);
@@ -320,21 +320,21 @@ unsafe fn article_destroy_skip_item_rows(ctx: &mut InlineCtx) {
 }
 
 /// `GenerateArticle`, after `ldr w9, [x0, #0x220]`: x8 = descriptor of the requested row.
-#[skyline::hook(offset = 0x3a6d18, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3a6d18, 0x3a6d18), inline)]
 unsafe fn article_generate_route_by_flag(ctx: &mut InlineCtx) {
     let is_item = is_item_descriptor(ctx.registers[8].x());
     ctx.registers[9].set_x(article_count_for(is_item));
 }
 
 /// `IsGeneratable`, after `ldr w10, [x21, #0x220]`: x11 = descriptor of the requested row.
-#[skyline::hook(offset = 0x3d65b4, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3d65b4, 0x3d65b4), inline)]
 unsafe fn article_is_generatable_route_by_flag(ctx: &mut InlineCtx) {
     let is_item = is_item_descriptor(ctx.registers[11].x());
     ctx.registers[10].set_x(article_count_for(is_item));
 }
 
 /// `GetActiveNum`, after `ldr w8, [x9, #0x220]`: x10 = `StaticArticleInfo`, w2 = row.
-#[skyline::hook(offset = 0x3d677c, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3d677c, 0x3d677c), inline)]
 unsafe fn article_active_num_route_by_flag(ctx: &mut InlineCtx) {
     let row = ctx.registers[2].x() & 0xffff_ffff;
     let is_item = is_item_descriptor(descriptor_from_info(ctx.registers[10].x(), row));
@@ -342,7 +342,7 @@ unsafe fn article_active_num_route_by_flag(ctx: &mut InlineCtx) {
 }
 
 /// Article fini dispatch (0x3d76c0), after `ldr w11, [x8, #0x220]`: x9 = `StaticArticleInfo`, x10 = row.
-#[skyline::hook(offset = 0x3d772c, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3d772c, 0x3d772c), inline)]
 unsafe fn article_fini_route_by_flag(ctx: &mut InlineCtx) {
     let is_item = is_item_descriptor(descriptor_from_info(ctx.registers[9].x(), ctx.registers[10].x()));
     ctx.registers[11].set_x(article_count_for(is_item));
@@ -520,7 +520,7 @@ impl StaticArticleData {
     }
 }
 
-#[skyline::hook(offset = 0x64b730)]
+#[skyline::hook(offset = offsets::ver!(0x64b730, 0x64b730))]
 fn get_static_fighter_data(kind: i32) -> *const StaticFighterData {
     let original_data: *const StaticFighterData = call_original!(kind);
 
@@ -738,50 +738,50 @@ macro_rules! decl_hooks {
 
 decl_hooks! {
     install_weapon_owner_hooks => weapon_owner_hook;
-    params(21, 0, 26, 0x33b6624 + 0x5B0);
-    game_animcmd_owner(22, 0, 8, 0x33acf74 + 0x5B0);
-    sound_animcmd_owner(22, 0, 8, 0x33aee34 + 0x5B0);
-    effect_animcmd_owner(22, 0, 8, 0x33aded4 + 0x5B0);
-    status_script_owner(22, 0, 8, 0x33ac03c + 0x5B0)
+    params(21, 0, 26, offsets::ver!(0x33b6624 + 0x5B0, 0x33b6624));
+    game_animcmd_owner(22, 0, 8, offsets::ver!(0x33acf74 + 0x5B0, 0x33acf74));
+    sound_animcmd_owner(22, 0, 8, offsets::ver!(0x33aee34 + 0x5B0, 0x33aee34));
+    effect_animcmd_owner(22, 0, 8, offsets::ver!(0x33aded4 + 0x5B0, 0x33aded4));
+    status_script_owner(22, 0, 8, offsets::ver!(0x33ac03c + 0x5B0, 0x33ac03c))
 }
 
 decl_hooks! {
     install_weapon_owner_name_hooks => weapon_owner_name_hook;
-    get_file(26, 0, 25, 0x17e0a48 - 0x40);
-    game_animcmd_owner_name(8, 3, 2, 0x33ace78 + 0x5B0);
-    sound_animcmd_owner_name(8, 3, 2, 0x33aed38 + 0x5B0);
-    effect_animcmd_owner_name(8, 3, 2, 0x33addd8 + 0x5B0);
-    status_script_owner_name(8, 3, 2, 0x33abf50 + 0x5B0)
+    get_file(26, 0, 25, offsets::ver!(0x17e0a48 - 0x40, 0x17e0a48));
+    game_animcmd_owner_name(8, 3, 2, offsets::ver!(0x33ace78 + 0x5B0, 0x33ace78));
+    sound_animcmd_owner_name(8, 3, 2, offsets::ver!(0x33aed38 + 0x5B0, 0x33aed38));
+    effect_animcmd_owner_name(8, 3, 2, offsets::ver!(0x33addd8 + 0x5B0, 0x33addd8));
+    status_script_owner_name(8, 3, 2, offsets::ver!(0x33abf50 + 0x5B0, 0x33abf50))
 }
 
 decl_hooks! {
     install_weapon_name_hooks => weapon_name_hook;
-    get_file_weapon_name(23, 0, 22, 0x17e0894 - 0x40);
-    normal_param_data(21, 0, 27, 0x33b682c + 0x5B0);
-    map_collision_param_data(21, 0, 2, 0x33b69ec + 0x5B0);
-    visibility_param_data(21, 0, 2, 0x33b6d10 + 0x5B0);
-    game_animcmd_weapon_name(8, 3, 3, 0x33ace88 + 0x5B0);
-    sound_animcmd_weapon_name(8, 3, 3, 0x33aed48 + 0x5B0);
-    effect_animcmd_weapon_name(8, 3, 3, 0x33adde8 + 0x5B0);
-    status_script_weapon_name(8, 3, 3, 0x33abf60 + 0x5B0)
+    get_file_weapon_name(23, 0, 22, offsets::ver!(0x17e0894 - 0x40, 0x17e0894));
+    normal_param_data(21, 0, 27, offsets::ver!(0x33b682c + 0x5B0, 0x33b682c));
+    map_collision_param_data(21, 0, 2, offsets::ver!(0x33b69ec + 0x5B0, 0x33b69ec));
+    visibility_param_data(21, 0, 2, offsets::ver!(0x33b6d10 + 0x5B0, 0x33b6d10));
+    game_animcmd_weapon_name(8, 3, 3, offsets::ver!(0x33ace88 + 0x5B0, 0x33ace88));
+    sound_animcmd_weapon_name(8, 3, 3, offsets::ver!(0x33aed48 + 0x5B0, 0x33aed48));
+    effect_animcmd_weapon_name(8, 3, 3, offsets::ver!(0x33adde8 + 0x5B0, 0x33adde8));
+    status_script_weapon_name(8, 3, 3, offsets::ver!(0x33abf60 + 0x5B0, 0x33abf60))
 }
 
 decl_hooks! {
     install_weapon_category_name_hooks => weapon_category_name_hook;
-    get_file_category(26, 0, 25, 0x17e0964)
+    get_file_category(26, 0, 25, offsets::ver!(0x17e0964, 0x17e09a4))
 }
 
 decl_hooks! {
     install_weapon_owner_category_hooks => weapon_owner_category_hook;
-    owner_category_1(8, 0, 8, 0x3db774);
-    owner_category_2(8, 0, 8, 0x641b44);
-    owner_category_3(9, 0, 8, 0x645890);
-    owner_category_4(0, 0, 8, 0x33a0544);
-    owner_category_5(9, 0, 8, 0x33a4e20);
-    status_script_owner_category(22, 0, 23, 0x33ac4d0);
-    game_animcmd_owner_category(22, 0, 23, 0x33ad3d8);
-    effect_animcmd_owner_category(22, 0, 23, 0x33ae338);
-    sound_animcmd_owner_category(22, 0, 23, 0x33af298)
+    owner_category_1(8, 0, 8, offsets::ver!(0x3db774, 0x3db774));
+    owner_category_2(8, 0, 8, offsets::ver!(0x641b44, 0x641b44));
+    owner_category_3(9, 0, 8, offsets::ver!(0x645890, 0x645890));
+    owner_category_4(0, 0, 8, offsets::ver!(0x33a0544, 0x339ff94));
+    owner_category_5(9, 0, 8, offsets::ver!(0x33a4e20, 0x33a4870));
+    status_script_owner_category(22, 0, 23, offsets::ver!(0x33ac4d0, 0x33abf20));
+    game_animcmd_owner_category(22, 0, 23, offsets::ver!(0x33ad3d8, 0x33ace28));
+    effect_animcmd_owner_category(22, 0, 23, offsets::ver!(0x33ae338, 0x33add88));
+    sound_animcmd_owner_category(22, 0, 23, offsets::ver!(0x33af298, 0x33aece8))
 }
 
 macro_rules! decl_hooks_kirby_get_kind {
@@ -823,20 +823,20 @@ macro_rules! decl_hooks_kirby {
 
 decl_hooks_kirby_get_kind! {
     install_kirby_copy_kind_hooks;
-    copy_setup_hook_get_kind(20, 0xba14f4);
-    copy_hook_1_get_kind(9, 0xba3e0c);
-    copy_hook_2_get_kind(9, 0xba400c);
-    copy_hook_3_get_kind(9, 0xba405c);
-    copy_hook_4_get_kind(20, 0xba5434)
+    copy_setup_hook_get_kind(20, offsets::ver!(0xba14f4, 0xba14f4));
+    copy_hook_1_get_kind(9, offsets::ver!(0xba3e0c, 0xba3e0c));
+    copy_hook_2_get_kind(9, offsets::ver!(0xba400c, 0xba400c));
+    copy_hook_3_get_kind(9, offsets::ver!(0xba405c, 0xba405c));
+    copy_hook_4_get_kind(20, offsets::ver!(0xba5434, 0xba5434))
 }
 
 decl_hooks_kirby! {
     install_kirby_copy_hooks => kirby_get_copy_articles;
-    copy_setup_hook(23, 0xba14f4);
-    copy_hook_1(9, 0xba3e0c);
-    copy_hook_2(9, 0xba400c);
-    copy_hook_3(9, 0xba405c);
-    copy_hook_4(12, 0xba5434)
+    copy_setup_hook(23, offsets::ver!(0xba14f4, 0xba14f4));
+    copy_hook_1(9, offsets::ver!(0xba3e0c, 0xba3e0c));
+    copy_hook_2(9, offsets::ver!(0xba400c, 0xba400c));
+    copy_hook_3(9, offsets::ver!(0xba405c, 0xba405c));
+    copy_hook_4(12, offsets::ver!(0xba5434, 0xba5434))
 }
 
 unsafe fn kirby_get_copy_articles(ctx: &mut InlineCtx, store_reg: usize) {
@@ -912,7 +912,7 @@ pub struct PocketUIParams {
     pub type_hash: u64
 }
 
-#[skyline::hook(offset = 0x1422f50)]
+#[skyline::hook(offset = offsets::ver!(0x1422f50, 0x1422f50))]
 unsafe extern "C" fn get_pocket_ui_param(param_1: *mut PocketUIParams) -> u64 {
     // println!("category: {}", (*param_1).category);
     // println!("padding: {:#?}", (*param_1).padding);

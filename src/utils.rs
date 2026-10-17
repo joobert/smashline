@@ -37,7 +37,7 @@ pub fn get_weapon_code_dependency(id: i32) -> Option<i32> {
 pub fn get_costume_from_entry_id(entry_id: i32) -> Option<i32> {
     unsafe {
         let text = skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as *const u64;
-        let some_vec = *text.add(0x5324680 / 0x8);
+        let some_vec = *text.add(offsets::ver!(0x5324680, 0x5323680) / 0x8);
 
         let index = entry_id as u64 * 8;
         let some_struct = *((some_vec + index + 0xe8) as *const u64);
@@ -84,7 +84,7 @@ pub fn get_costume_data(hash: Hash40, costume: i32) -> Costume {
 
 fn dynamic_module_manager() -> *mut u64 {
     let text = unsafe { skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as *mut u8 };
-    unsafe { **text.add(0x5327cd0).cast::<*mut *mut u64>() }
+    unsafe { **text.add(offsets::ver!(0x5327cd0, 0x5326cd0)).cast::<*mut *mut u64>() }
 }
 
 #[repr(C)]
@@ -103,7 +103,7 @@ struct MyDeque {
     len: usize,
 }
 
-#[skyline::from_offset(0x22b59c0)]
+#[skyline::from_offset(offsets::ver!(0x22b59c0, 0x22b59c0))]
 fn extend_deque(deque: *mut MyDeque);
 
 extern "C" {
@@ -254,10 +254,10 @@ pub fn load_fighter_module(kind: i32) {
     }
 }
 
-#[skyline::from_offset(0x22b6f60)]
+#[skyline::from_offset(offsets::ver!(0x22b6f60, 0x22b6f60))]
 fn dynamic_module_manager_unload(manager: *mut u64, name: &Hash40);
 
-#[skyline::hook(offset = 0x17e4900)]
+#[skyline::hook(offset = offsets::ver!(0x17e4900, 0x17e4940))]
 fn load_fighter_code_module_hook(loader: *mut u8, kind: i32) -> *mut u8 {
     let result = call_original!(loader, kind);
 
@@ -271,7 +271,7 @@ fn load_fighter_code_module_hook(loader: *mut u8, kind: i32) -> *mut u8 {
     result
 }
 
-#[skyline::hook(offset = 0x22b6f60)]
+#[skyline::hook(offset = offsets::ver!(0x22b6f60, 0x22b6f60))]
 fn dynamic_module_manager_unload_hook(manager: *mut u64, name: &Hash40) -> u64 {
     let name = *name;
     let result = call_original!(manager, &name);
@@ -339,18 +339,18 @@ pub fn is_fighter_module_loaded(id: i32) -> bool {
     }
 }
 
-#[skyline::from_offset(0x353e330 + 0x5B0)]
+#[skyline::from_offset(offsets::ver!(0x353e330 + 0x5B0, 0x353e330))]
 fn get_search_path_index(index: &mut u32, bytes: *const u8);
 
-#[skyline::from_offset(0x353e4e0 + 0x5B0)]
+#[skyline::from_offset(offsets::ver!(0x353e4e0 + 0x5B0, 0x353e4e0))]
 fn get_file_path_from_search_path(search_path: u32) -> u32;
 
-#[skyline::from_offset(0x3540450 + 0x5B0)]
+#[skyline::from_offset(offsets::ver!(0x3540450 + 0x5B0, 0x3540450))]
 fn add_to_res_service(filesystem: *mut u64, file_path: u32);
 
 fn get_filesystem() -> *mut u64 {
     let text = unsafe { skyline::hooks::getRegionAddress(skyline::hooks::Region::Text) as *mut u8 };
-    unsafe { *text.add(0x5332f20).cast::<*mut u64>() }
+    unsafe { *text.add(offsets::ver!(0x5332f20, 0x5331f20)).cast::<*mut u64>() }
 }
 
 pub fn load_file(name: impl Into<String>) {

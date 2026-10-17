@@ -7,7 +7,7 @@ use smashline::Hash40;
 pub mod fighters;
 pub mod weapons;
 
-#[skyline::hook(offset = 0x6079d0)]
+#[skyline::hook(offset = offsets::ver!(0x6079d0, 0x6079d0))]
 fn fighter_initialize_object_data(
     fighter: &mut BattleObject,
     id: u32,

@@ -10,13 +10,13 @@ pub trait FromArrayAddress {
 
 pub struct StaticArrayAccessor<T: FromArrayAddress> {
     text: AtomicUsize,
-    offset: usize,
+    offset: offsets::Offset,
     count: usize,
     _phantom: PhantomData<T>,
 }
 
 impl<T: FromArrayAddress> StaticArrayAccessor<T> {
-    pub const fn new(offset: usize, count: usize) -> Self {
+    pub const fn new(offset: offsets::Offset, count: usize) -> Self {
         Self {
             text: AtomicUsize::new(0),
             offset,
@@ -35,7 +35,7 @@ impl<T: FromArrayAddress> StaticArrayAccessor<T> {
         }
 
         (index < self.count)
-            .then(|| unsafe { T::from_address(text + self.offset + T::STRIDE * index) })
+            .then(|| unsafe { T::from_address(text + self.offset.get() + T::STRIDE * index) })
     }
 
     pub fn iter(&self) -> StaticArrayIterator<T> {

@@ -69,12 +69,12 @@ fn call_state_callback(agent: &mut L2CFighterBase, event: ObjectEvent) {
 
 pub static mut CAN_RUN_ON_START : bool = false;
 
-#[skyline::hook(offset = 0x48ad04, inline)]
+#[skyline::hook(offset = offsets::ver!(0x48ad04, 0x48ad04), inline)]
 unsafe fn lua_module_start_lua2cpp(_ctx: &InlineCtx) {
     CAN_RUN_ON_START = true;
 }
 
-#[skyline::hook(offset = 0x48ada0)]
+#[skyline::hook(offset = offsets::ver!(0x48ada0, 0x48ada0))]
 unsafe fn lua_module_end(lua_module: *const u64) {
     let agent = &mut *std::ptr::with_exposed_provenance_mut::<L2CFighterBase>(
         *lua_module.add(0x1d8 / 8) as usize,
@@ -82,7 +82,7 @@ unsafe fn lua_module_end(lua_module: *const u64) {
     call_state_callback(agent, ObjectEvent::End);
 }
 
-#[skyline::hook(offset = 0x48abac, inline)]
+#[skyline::hook(offset = offsets::ver!(0x48abac, 0x48abac), inline)]
 unsafe fn lua_module_initialize_lua2cpp(ctx: &InlineCtx) {
     let agent = &mut *std::ptr::with_exposed_provenance_mut::<L2CFighterBase>(
         ctx.registers[0].x() as usize,
@@ -90,7 +90,7 @@ unsafe fn lua_module_initialize_lua2cpp(ctx: &InlineCtx) {
     call_state_callback(agent, ObjectEvent::Initialize);
 }
 
-#[skyline::hook(offset = 0x48ac44, inline)]
+#[skyline::hook(offset = offsets::ver!(0x48ac44, 0x48ac44), inline)]
 unsafe fn lua_module_finalize_lua2cpp(ctx: &InlineCtx) {
     let agent = &mut *std::ptr::with_exposed_provenance_mut::<L2CFighterBase>(
         ctx.registers[0].x() as usize,
@@ -98,7 +98,7 @@ unsafe fn lua_module_finalize_lua2cpp(ctx: &InlineCtx) {
     call_state_callback(agent, ObjectEvent::Finalize);
 }
 
-#[skyline::hook(offset = 0x3afde0, inline)]
+#[skyline::hook(offset = offsets::ver!(0x3afde0, 0x3afde0), inline)]
 unsafe fn start_module_accessor_end(ctx: &mut InlineCtx) {
     if CAN_RUN_ON_START {
         let boma = ctx.registers[19].x();
